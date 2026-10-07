@@ -250,7 +250,7 @@ def _write_webui_sidebar_state(raw: dict[str, Any]) -> dict[str, Any]:
         ensure_ascii=False,
         indent=2,
         sort_keys=True,
-    ).encode("utf-8")
+    ).encode("utf-8") + b"\n"
     if len(encoded) > _MAX_STATE_FILE_BYTES:
         raise ValueError("sidebar state is too large")
 
@@ -259,7 +259,6 @@ def _write_webui_sidebar_state(raw: dict[str, Any]) -> dict[str, Any]:
     tmp = path.with_suffix(".json.tmp")
     with open(tmp, "wb") as f:
         f.write(encoded)
-        f.write(b"\n")
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)

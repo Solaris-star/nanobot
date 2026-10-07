@@ -2,6 +2,9 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
+import pytest
 
 import nanobot.webui.sidebar_state as sidebar_state
 from nanobot.webui.sidebar_state import (
@@ -178,3 +181,52 @@ def test_sidebar_state_serializes_concurrent_writes(monkeypatch) -> None:
 
     assert results == payloads
     assert peak_writes == 1
+
+
+def _payload_with_json_bytes(target: int, *, title: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "pinned_keys": ["p"] + [f"{index:04d}:" + "x" * 480 for index in range(500)],
+        "title_overrides": {"websocket:title": title},
+    }
+
+    def encoded_size() -> int:
+        state = sidebar_state.normalize_webui_sidebar_state(payload)
+        state["updated_at"] = "2026-10-07T00:00:00Z"
+        return len(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
+
+    while target - encoded_size() > 511:
+        index = len(payload["pinned_keys"])
+        payload["pinned_keys"].append(f"{index:04d}:" + "x" * 480)
+    payload["pinned_keys"][0] += "x" * (target - encoded_size())
+    assert encoded_size() == target
+    return payload
+
+
+@pytest.mark.parametrize("title", ["Release", "汉字"])
+def test_sidebar_state_max_file_size_round_trips(tmp_path, monkeypatch, title: str) -> None:
+    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    payload = _payload_with_json_bytes(256 * 1024 - 1, title=title)
+
+    saved = write_webui_sidebar_state(payload)
+    contents = webui_sidebar_state_path().read_bytes()
+
+    assert len(contents) == 256 * 1024
+    assert contents.endswith(b"\n")
+    assert read_webui_sidebar_state() == saved
+
+
+@pytest.mark.parametrize("title", ["Release", "汉字"])
+def test_sidebar_state_rejects_oversize_file_without_replacing_it(
+    tmp_path, monkeypatch, title: str
+) -> None:
+    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    original = write_webui_sidebar_state({"pinned_keys": ["original"]})
+    path = webui_sidebar_state_path()
+    before = path.read_bytes()
+    payload = _payload_with_json_bytes(256 * 1024, title=title)
+
+    with pytest.raises(ValueError, match="sidebar state is too large"):
+        write_webui_sidebar_state(payload)
+
+    assert path.read_bytes() == before
+    assert read_webui_sidebar_state() == original
