@@ -80,8 +80,10 @@
     --muted-foreground: 0 0% 65%;
     --accent: 0 0% 25%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    /* Also used as text on cards and focused menu items; pair the light red
+       with a dark foreground for filled destructive buttons. */
+    --destructive: 0 93.5% 81.8%;
+    --destructive-foreground: 0 0% 9%;
     --border: 0 0% 28%;
     --input: var(--border);
     --ring: 0 0% 83.1%;
